@@ -1,0 +1,7 @@
+{
+  "name": "consulta-processual-assertif",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Consulta pública aos metadados de processos judiciais (Datajud/CNJ), com identidade Assertif."
+}

@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Consulta Processual Pública — Assertif</title>
+<meta name="description" content="Consulta pública aos metadados de processos judiciais do Brasil, a partir da Base Nacional do Poder Judiciário (Datajud/CNJ)." />
+<meta name="theme-color" content="#1A1714" />
+
+<style>
+/* ===================== FONTES (self-hosted, marca Assertif) ===================== */
+@font-face{font-family:"Sora";src:url("assets/fonts/Sora-Regular.ttf") format("truetype");font-weight:400;font-display:swap}
+@font-face{font-family:"Sora";src:url("assets/fonts/Sora-Medium.ttf") format("truetype");font-weight:500;font-display:swap}
+@font-face{font-family:"Sora";src:url("assets/fonts/Sora-Bold.ttf") format("truetype");font-weight:700;font-display:swap}
+@font-face{font-family:"Sora";src:url("assets/fonts/Sora-ExtraBold.ttf") format("truetype");font-weight:800;font-display:swap}
+@font-face{font-family:"Geist";src:url("assets/fonts/Geist-VariableFont_wght.ttf") format("truetype");font-weight:100 900;font-display:swap}
+@font-face{font-family:"Geist Mono";src:url("assets/fonts/GeistMonoVF.woff2") format("woff2");font-weight:100 900;font-display:swap}
+
+/* ===================== TOKENS DE MARCA ===================== */
+:root{
+  --carbon:#1A1714; --paper:#F5F3F0; --white:#FFFFFF;
+  --red:#FF1D00; --amber:#FF9D00;
+  --n800:#26211D; --n700:#3A352F; --n600:#4A453E;
+  --n400:#8A857E; --n300:#C9C4BD; --n200:#E4E1DC;
+  --sora:"Sora",system-ui,sans-serif;
+  --geist:"Geist",system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,monospace;
+  --sp:8px;
+  --radius:4px;
+}
+
+/* ===================== RESET / BASE ===================== */
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:var(--geist);
+  background:var(--paper);
+  color:var(--carbon);
+  line-height:1.5;
+  font-size:16px;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+h1,h2,h3{font-family:var(--sora);letter-spacing:-.02em;line-height:1.1}
+a{color:var(--red);text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+.mono{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:12px;color:var(--n600)}
+
+/* ===================== CABEÇALHO ===================== */
+header.top{
+  position:sticky;top:0;z-index:20;
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:14px 20px;
+  background:rgba(245,243,240,.85);
+  backdrop-filter:saturate(1.4) blur(10px);
+  border-bottom:1px solid var(--n200);
+}
+header.top img{height:26px;width:auto;display:block}
+header.top .tag{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:10px;color:var(--n600)}
+
+/* ===================== HERO ===================== */
+.hero{padding:32px 20px 20px;max-width:900px;margin:0 auto}
+.hero .kicker{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--red);margin-bottom:12px;display:inline-block}
+.hero h1{font-size:30px;font-weight:800;margin-bottom:12px}
+.hero p{font-size:16px;color:var(--n700);max-width:56ch}
+.stripe{height:6px;width:120px;background:var(--red);transform:skewX(-18deg);margin:20px 0 0 3px}
+
+/* ===================== BLOCO DE BUSCA ===================== */
+main{max-width:900px;margin:0 auto;padding:8px 20px 48px}
+.panel{
+  background:var(--white);
+  border:1px solid var(--n300);
+  border-radius:var(--radius);
+  position:relative;overflow:hidden;
+  margin-top:20px;
+}
+/* cunha diagonal 18° — elemento gráfico da marca */
+.panel::before{
+  content:"";position:absolute;top:0;right:0;width:38px;height:38px;
+  background:var(--red);z-index:1;pointer-events:none;
+  clip-path:polygon(100% 0,100% 100%,0 0);
+}
+.tabs{display:flex;border-bottom:1px solid var(--n200)}
+.tabs button{
+  flex:1;background:none;border:none;padding:16px 12px;
+  font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:12px;
+  color:var(--n600);border-bottom:2px solid transparent;transition:all .1s;
+}
+.tabs button[aria-selected="true"]{color:var(--carbon);border-bottom-color:var(--red)}
+.tabpane{padding:24px 20px;display:none}
+.tabpane.active{display:block}
+
+label.field{display:block;margin-bottom:16px}
+label.field > span{display:block;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:11px;color:var(--n600);margin-bottom:6px}
+input,select{
+  width:100%;font-family:var(--geist);font-size:16px;color:var(--carbon);
+  background:var(--paper);border:1px solid var(--n300);border-radius:var(--radius);
+  padding:13px 14px;transition:border-color .1s;
+}
+input:focus,select:focus{outline:none;border-color:var(--carbon)}
+input::placeholder{color:var(--n400)}
+.grid2{display:grid;grid-template-columns:1fr;gap:0}
+@media(min-width:620px){.grid2{grid-template-columns:1fr 1fr;gap:16px}}
+
+.hint{font-family:var(--mono);font-size:11px;letter-spacing:.02em;text-transform:none;color:var(--n600);margin-top:-8px;margin-bottom:16px;min-height:14px}
+.hint.ok{color:#2e7d32}
+.hint.warn{color:var(--amber)}
+.hint.err{color:var(--red)}
+
+.btn{
+  width:100%;background:var(--red);color:var(--white);border:none;border-radius:var(--radius);
+  font-family:var(--sora);font-weight:700;font-size:16px;letter-spacing:-.01em;
+  padding:15px;transition:filter .1s,transform .05s;
+}
+.btn:hover{filter:brightness(.92)}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{background:var(--n300);color:var(--n600);cursor:not-allowed;filter:none}
+
+/* ===================== ESTADOS / RESULTADOS ===================== */
+#status{margin-top:24px}
+.loading,.msg{
+  background:var(--white);border:1px solid var(--n300);border-radius:var(--radius);
+  padding:24px 20px;text-align:center;color:var(--n700);
+}
+.msg.error{border-color:var(--red)}
+.spinner{
+  width:26px;height:26px;border:3px solid var(--n200);border-top-color:var(--red);
+  border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading small{display:block;margin-top:8px;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--n400)}
+
+.resumo{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:11px;color:var(--n600);margin:24px 0 12px}
+
+/* Cartão de processo */
+.proc{
+  background:var(--white);border:1px solid var(--n300);border-radius:var(--radius);
+  position:relative;overflow:hidden;margin-bottom:16px;
+}
+.proc::before{content:"";position:absolute;top:0;right:0;width:40px;height:40px;background:var(--amber);clip-path:polygon(100% 0,100% 100%,0 0)}
+.proc-head{padding:18px 20px;border-bottom:1px solid var(--n200)}
+.proc-num{font-family:var(--sora);font-weight:800;font-size:19px;letter-spacing:-.02em;word-break:break-word;padding-right:32px}
+.proc-trib{display:inline-block;margin-top:8px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:11px;background:var(--carbon);color:var(--paper);padding:4px 9px;border-radius:2px}
+.proc-body{padding:18px 20px}
+.meta{display:grid;grid-template-columns:1fr;gap:14px 24px}
+@media(min-width:520px){.meta{grid-template-columns:1fr 1fr}}
+.meta dt{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:10px;color:var(--n400);margin-bottom:2px}
+.meta dd{font-size:15px;color:var(--carbon)}
+.badges{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px}
+.badge{font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;border:1px solid var(--n300);color:var(--n700);padding:5px 9px;border-radius:2px;background:var(--paper)}
+
+/* Timeline de movimentos */
+.movs-title{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:11px;color:var(--n600);margin:20px 0 12px;border-top:1px solid var(--n200);padding-top:16px}
+.tl{list-style:none;border-left:2px solid var(--n200);margin-left:6px}
+.tl li{position:relative;padding:0 0 16px 20px}
+.tl li:last-child{padding-bottom:0}
+.tl li::before{content:"";position:absolute;left:-6px;top:3px;width:10px;height:10px;background:var(--red);transform:skewX(-18deg)}
+.tl time{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.02em;color:var(--n600)}
+.tl .mv{font-size:14px;color:var(--carbon)}
+.tl .cx{font-size:12px;color:var(--n600);margin-top:2px}
+.more{margin-top:12px;background:none;border:1px solid var(--n300);border-radius:2px;padding:8px 12px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:11px;color:var(--n700)}
+.more:hover{border-color:var(--carbon)}
+
+/* ===================== RODAPÉ ===================== */
+footer{background:var(--carbon);color:var(--paper);margin-top:48px;padding:36px 20px 40px}
+footer .in{max-width:900px;margin:0 auto}
+footer img{height:24px;margin-bottom:18px}
+footer p{font-size:13px;color:#B9B3AC;max-width:70ch;margin-bottom:10px}
+footer .mono{color:#8A857E}
+footer a{color:var(--amber)}
+.disclaimer{border-left:2px solid var(--amber);padding-left:14px;margin-top:18px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <img src="assets/assertif-logo.png" alt="Assertif" />
+  <span class="tag">Consulta Processual Pública</span>
+</header>
+
+<section class="hero">
+  <span class="kicker">Base Nacional · Datajud / CNJ</span>
+  <h1>Metadados de processos judiciais do Brasil</h1>
+  <p>Consulta pública aos dados processuais disponibilizados pela Base Nacional de Dados do Poder Judiciário (Datajud), conforme a Portaria CNJ nº 160/2020. Processos sigilosos e dados das partes são preservados.</p>
+  <div class="stripe"></div>
+</section>
+
+<main>
+  <div class="panel">
+    <div class="tabs" role="tablist">
+      <button id="tab-num" role="tab" aria-selected="true" aria-controls="pane-num">Por número</button>
+      <button id="tab-adv" role="tab" aria-selected="false" aria-controls="pane-adv">Avançada</button>
+    </div>
+
+    <!-- PANE: por número -->
+    <div class="tabpane active" id="pane-num" role="tabpanel">
+      <label class="field" for="numero">
+        <span>Número único do processo (CNJ)</span>
+        <input id="numero" inputmode="numeric" autocomplete="off"
+               placeholder="0000000-00.0000.0.00.0000" maxlength="25" />
+      </label>
+      <div class="hint" id="hint-num">20 dígitos. O tribunal é identificado automaticamente.</div>
+      <button class="btn" id="btn-num">Consultar</button>
+    </div>
+
+    <!-- PANE: busca avançada -->
+    <div class="tabpane" id="pane-adv" role="tabpanel">
+      <label class="field" for="trib">
+        <span>Tribunal</span>
+        <select id="trib"></select>
+      </label>
+      <div class="grid2">
+        <label class="field" for="classe">
+          <span>Classe (código TPU) — opcional</span>
+          <input id="classe" inputmode="numeric" placeholder="Ex.: 436" autocomplete="off" />
+        </label>
+        <label class="field" for="orgao">
+          <span>Órgão julgador (código) — opcional</span>
+          <input id="orgao" inputmode="numeric" placeholder="Ex.: 16403" autocomplete="off" />
+        </label>
+      </div>
+      <div class="grid2">
+        <label class="field" for="de">
+          <span>Ajuizado a partir de — opcional</span>
+          <input id="de" type="date" />
+        </label>
+        <label class="field" for="ate">
+          <span>Ajuizado até — opcional</span>
+          <input id="ate" type="date" />
+        </label>
+      </div>
+      <div class="hint" id="hint-adv">Selecione o tribunal e ao menos um filtro. A busca por nome de parte não é permitida.</div>
+      <button class="btn" id="btn-adv">Buscar processos</button>
+    </div>
+  </div>
+
+  <div id="status" aria-live="polite"></div>
+  <div id="results"></div>
+</main>
+
+<footer>
+  <div class="in">
+    <img src="assets/assertif-logo-reverse.png" alt="Assertif" />
+    <p class="mono">Fonte dos dados</p>
+    <p>Os dados são originários da Base Nacional de Dados do Poder Judiciário (Datajud), acessados pela API Pública do Conselho Nacional de Justiça (CNJ), e seguem os critérios da Portaria CNJ nº 160, de 09/09/2020.</p>
+    <div class="disclaimer">
+      <p>Esta ferramenta exibe apenas metadados públicos e não substitui certidões ou consultas oficiais nos sistemas dos tribunais. Processos em segredo de justiça e dados pessoais das partes não são exibidos.</p>
+    </div>
+    <p style="margin-top:18px" class="mono">© Assertif · Consulta de caráter informativo</p>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
