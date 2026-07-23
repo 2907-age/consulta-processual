@@ -24,24 +24,17 @@ const ALIAS_RE = /^api_publica_[a-z0-9-]{2,20}$/;
 // Campos que jamais devem ser expostos (defesa contra dados de parte, caso
 // a API algum dia passe a retorná-los). A API pública hoje não os envia.
 const CAMPOS_PROIBIDOS = [
-  "partes",
-  "polos",
-  "poloAtivo",
-  "poloPassivo",
-  "advogados",
-  "representantes",
-  "nomeParte",
-  "documentoParte",
-  "cpf",
-  "cnpj",
+  "partes", "polos", "poloAtivo", "poloPassivo", "advogados",
+  "representantes", "nomeParte", "documentoParte", "cpf", "cnpj",
 ];
 
 function limparSigilo(sub) {
-  // Remove campos proibidos de forma recursiva e superficial.
   if (!sub || typeof sub !== "object") return sub;
   for (const campo of CAMPOS_PROIBIDOS) delete sub[campo];
   return sub;
 }
+
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export default async function handler(req, res) {
   // CORS — permite que o front-end (mesmo domínio ou outro) chame a função.
@@ -55,25 +48,17 @@ export default async function handler(req, res) {
 
   let corpo = req.body;
   if (typeof corpo === "string") {
-    try {
-      corpo = JSON.parse(corpo || "{}");
-    } catch {
-      return res.status(400).json({ erro: "Corpo da requisição inválido." });
-    }
+    try { corpo = JSON.parse(corpo || "{}"); }
+    catch { return res.status(400).json({ erro: "Corpo da requisição inválido." }); }
   }
 
   const { alias, query } = corpo || {};
-
   if (!alias || !ALIAS_RE.test(alias))
-    return res
-      .status(400)
-      .json({ erro: "Tribunal (alias) ausente ou inválido." });
-
+    return res.status(400).json({ erro: "Tribunal (alias) ausente ou inválido." });
   if (!query || typeof query !== "object")
     return res.status(400).json({ erro: "Consulta (query) ausente." });
 
-  // Monta o corpo enviado ao Datajud. Sempre pede o campo nivelSigilo para
-  // conseguirmos filtrar. Limita o tamanho para no máximo 50 resultados.
+  // Monta o corpo enviado ao Datajud. Limita a no máximo 50 resultados.
   const size = Math.min(Number(corpo.size) || 20, 50);
   const payload = { query, size };
   if (Array.isArray(corpo.sort)) payload.sort = corpo.sort;
@@ -81,59 +66,66 @@ export default async function handler(req, res) {
   if (Number.isInteger(corpo.from)) payload.from = corpo.from;
 
   const url = `${DATAJUD_BASE}/${alias}/_search`;
+  const TENTATIVAS = 3; // tenta novamente em caso de limite de uso (429) ou 503
 
-  // A API do Datajud pode ser lenta (consultas frias chegam a 30s).
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 55000);
+  for (let tentativa = 1; tentativa <= TENTATIVAS; tentativa++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
+    try {
+      const resposta = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: API_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
 
-  try {
-    const resposta = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+      // Limite de uso / indisponibilidade momentânea: espera e tenta de novo.
+      if ((resposta.status === 429 || resposta.status === 503) && tentativa < TENTATIVAS) {
+        await dormir(tentativa * 1200);
+        continue;
+      }
+      if (resposta.status === 429) {
+        return res.status(429).json({
+          erro: "O Datajud está recebendo muitas consultas neste momento (limite de uso da base pública, que é compartilhado). Aguarde alguns segundos e tente novamente.",
+        });
+      }
+      if (!resposta.ok) {
+        const texto = await resposta.text();
+        return res.status(resposta.status).json({
+          erro: `O Datajud retornou erro ${resposta.status}.`,
+          detalhe: texto.slice(0, 300),
+        });
+      }
 
-    if (!resposta.ok) {
-      const texto = await resposta.text();
-      return res.status(resposta.status).json({
-        erro: `O Datajud retornou erro ${resposta.status}.`,
-        detalhe: texto.slice(0, 500),
+      const dados = await resposta.json();
+      const hits = dados?.hits?.hits || [];
+      const publicos = hits.filter((h) => ((h._source || {}).nivelSigilo ?? 0) === 0);
+      const removidos = hits.length - publicos.length;
+      const processos = publicos.map((h) => ({ _sort: h.sort, ...limparSigilo(h._source) }));
+
+      return res.status(200).json({
+        total: dados?.hits?.total?.value ?? processos.length,
+        quantidade: processos.length,
+        removidosPorSigilo: removidos,
+        processos,
+      });
+    } catch (e) {
+      clearTimeout(timeout);
+      // Erro de rede transitório: tenta de novo (menos quando estourou o tempo).
+      if (tentativa < TENTATIVAS && e?.name !== "AbortError") {
+        await dormir(tentativa * 1000);
+        continue;
+      }
+      const abortou = e?.name === "AbortError";
+      return res.status(abortou ? 504 : 502).json({
+        erro: abortou
+          ? "O Datajud demorou para responder. Tente novamente em instantes."
+          : "Não foi possível consultar o Datajud no momento.",
       });
     }
-
-    const dados = await resposta.json();
-    const hits = dados?.hits?.hits || [];
-
-    // Filtra sigilo e limpa campos proibidos.
-    const publicos = hits.filter((h) => {
-      const s = h._source || {};
-      return (s.nivelSigilo ?? 0) === 0;
-    });
-    const removidos = hits.length - publicos.length;
-
-    const processos = publicos.map((h) => ({
-      _sort: h.sort, // usado para paginação search_after
-      ...limparSigilo(h._source),
-    }));
-
-    return res.status(200).json({
-      total: dados?.hits?.total?.value ?? processos.length,
-      quantidade: processos.length,
-      removidosPorSigilo: removidos,
-      processos,
-    });
-  } catch (e) {
-    clearTimeout(timeout);
-    const abortou = e?.name === "AbortError";
-    return res.status(abortou ? 504 : 502).json({
-      erro: abortou
-        ? "O Datajud demorou para responder. Tente novamente em instantes."
-        : "Não foi possível consultar o Datajud no momento.",
-    });
   }
+
+  // Segurança: não deveria chegar aqui.
+  return res.status(502).json({ erro: "Não foi possível consultar o Datajud no momento." });
 }

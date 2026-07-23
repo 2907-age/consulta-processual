@@ -250,6 +250,8 @@ async function buscarPorNumero(){
   }
   hint.className="hint"; hint.textContent="Tribunal identificado. Consultando…";
 
+  const btn=document.getElementById("btn-num");
+  btn.disabled=true; btn.textContent="Consultando…";
   limpar(); mostrarCarregando();
   try{
     const dados=await consultar(alias,{match:{numeroProcesso:d}},{size:5});
@@ -258,6 +260,8 @@ async function buscarPorNumero(){
   }catch(e){
     mostrarMensagem(esc(e.message),"error");
     hint.className="hint"; hint.textContent="";
+  }finally{
+    btn.disabled=false; btn.textContent="Consultar";
   }
 }
 
@@ -282,6 +286,8 @@ async function buscarAvancada(){
   if(!must.length){hint.className="hint err";hint.textContent="Informe ao menos um filtro (classe, órgão ou período).";return;}
   hint.className="hint"; hint.textContent="";
 
+  const btn=document.getElementById("btn-adv");
+  btn.disabled=true; btn.textContent="Buscando…";
   limpar(); mostrarCarregando();
   try{
     const dados=await consultar(alias,{bool:{must}},{
@@ -290,6 +296,8 @@ async function buscarAvancada(){
     renderResultados(dados);
   }catch(e){
     mostrarMensagem(esc(e.message),"error");
+  }finally{
+    btn.disabled=false; btn.textContent="Buscar processos";
   }
 }
 
