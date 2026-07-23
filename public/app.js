@@ -202,6 +202,18 @@ const SIN_FIM=[
   {re:/baixa definitiva/,rot:"Baixa definitiva"},
   {re:/arquivament/,rot:"Arquivamento"},
   {re:/\bextin(cao|to|ta)/,rot:"Extinção"},
+  {re:/cumprimento de sentenca/,rot:"Cumprimento de sentença"},
+  {re:/liquidacao/,rot:"Liquidação (execução)"},
+];
+// Recursos. Na Justiça do Trabalho o recurso pressupõe depósito recursal, então
+// funcionam como INDÍCIO INDIRETO de depósito (mesmo sem movimento explícito).
+const SIN_RECURSO=[
+  {re:/recurso ordinario/,rot:"Recurso ordinário"},
+  {re:/recurso de revista/,rot:"Recurso de revista"},
+  {re:/recurso adesivo/,rot:"Recurso adesivo"},
+  {re:/agravo de (instrumento|peticao)/,rot:"Agravo"},
+  {re:/embargos a execucao/,rot:"Embargos à execução"},
+  {re:/\brecurso\b/,rot:"Recurso"},
 ];
 
 function coletarSinais(movs,dic){
@@ -238,43 +250,51 @@ function analisarProcesso(p){
   const ultima=datas.length?new Date(Math.max(...datas)):null;
   const diasParado=ultima?Math.floor((new Date()-ultima)/86400000):null;
 
-  const hasDep=dep.length>0,hasLev=lev.length>0,hasConv=conv.length>0,isFim=fim.length>0;
+  const rec=coletarSinais(movs,SIN_RECURSO);
+  const ehTrab=/^(trt|tst)/i.test(p.tribunal||"");
+  const hasDepDireto=dep.length>0,hasLev=lev.length>0,hasConv=conv.length>0,isFim=fim.length>0,hasRec=rec.length>0;
+  // Na Justiça do Trabalho, recurso pressupõe depósito recursal (indício indireto).
+  const depIndireto=ehTrab&&hasRec&&!hasDepDireto;
+  const hasDep=hasDepDireto||depIndireto;
+  const origemDep=hasDepDireto
+    ? "Há indício de depósito, garantia ou constrição de valores"
+    : "Não há movimento explícito de depósito, mas trata-se de processo trabalhista com recurso — que pressupõe depósito recursal";
   let nivel,chave,fraseDep,sugestao;
 
   if(!hasDep){
     nivel="Sem indício";chave="nenhum";
-    fraseDep="Não foram encontrados, nos movimentos públicos, sinais de depósito, garantia ou constrição de valores.";
+    fraseDep="Não foram encontrados, nos movimentos públicos, sinais de depósito, garantia, constrição de valores nem de recurso que pressuponha depósito recursal.";
     sugestao="Sem indício nos metadados. Havendo suspeita de depósito neste caso, confirme diretamente nos autos — o Datajud pode não registrar todos os atos.";
   }else if(hasConv){
     nivel="Baixo";chave="baixo";
-    fraseDep="Há indício de depósito, mas também de conversão em renda: o valor pode ter sido convertido em favor do ente público, o que tende a encerrar a possibilidade de recuperação.";
+    fraseDep=`${origemDep}, porém também de conversão em renda: o valor pode ter sido convertido em favor do ente público, o que tende a encerrar a possibilidade de recuperação.`;
     sugestao="Confirmar nos autos se a conversão foi total. Havendo saldo remanescente ou conversão indevida, avaliar a medida cabível.";
-  }else if(hasLev && maisRecente(lev)>=maisRecente(dep)){
+  }else if(hasDepDireto && hasLev && maisRecente(lev)>=maisRecente(dep)){
     nivel="Baixo";chave="baixo";
-    fraseDep="Há indício de depósito, porém com levantamento/alvará em data igual ou posterior: os valores podem já ter sido levantados.";
+    fraseDep=`${origemDep}, porém com levantamento/alvará em data igual ou posterior: os valores podem já ter sido levantados.`;
     sugestao="Confirmar nos autos quem levantou e se restou saldo. Se o levantamento foi parcial ou por terceiro, avaliar providência.";
   }else if(isFim){
     nivel="Alto";chave="alto";
-    fraseDep="Há indício de depósito/garantia e o processo aparenta estar encerrado (trânsito em julgado, baixa ou arquivamento) sem sinal de levantamento — forte candidato à recuperação.";
+    fraseDep=`${origemDep}, e o processo aparenta estar encerrado ou em fase de execução (trânsito em julgado, baixa, arquivamento, liquidação ou extinção da execução) sem sinal de levantamento — forte candidato à recuperação.`;
     sugestao="Priorizar. Confirmar o saldo em conta judicial e peticionar o levantamento/restituição em favor da parte.";
   }else if(diasParado!=null && diasParado>365){
     nivel="Médio";chave="medio";
-    fraseDep=`Há indício de depósito e o processo está parado há ${humanizarDias(diasParado)}, sem sinal de levantamento — possível depósito esquecido.`;
+    fraseDep=`${origemDep}, e o processo está parado há ${humanizarDias(diasParado)}, sem sinal de levantamento — possível depósito esquecido.`;
     sugestao="Verificar a situação atual e o saldo em conta judicial; avaliar o peticionamento conforme a fase.";
   }else{
     nivel="Médio";chave="medio";
-    fraseDep="Há indício de depósito e o processo aparenta estar em andamento, sem sinal de levantamento.";
+    fraseDep=`${origemDep}, e o processo aparenta estar em andamento, sem sinal de levantamento.`;
     sugestao="Acompanhar o desfecho; ao encerrar, verificar o saldo e peticionar o levantamento.";
   }
 
-  const status=isFim?"encerrado/baixado":"em andamento";
+  const status=isFim?"encerrado/em execução":"em andamento";
   const anos=anosDesde(p.dataAjuizamento);
   const ctx=`${p.classe?.nome||"Processo"} ${status}, ${p.grau?p.grau+" ":""}no ${p.orgaoJulgador?.nome||"órgão não informado"} (${p.tribunal||"—"}). `+
     `Ajuizado em ${fmtData(p.dataAjuizamento)}${anos?` (há ${anos} ano${anos>1?"s":""})`:""}. `+
     (ultima?`Última movimentação em ${fmtData(ultima.toISOString())}${diasParado!=null?` (há ${humanizarDias(diasParado)})`:""}.`:"");
 
   // Evidências: agrupadas, sem duplicar rótulo+data.
-  const grupos=[["Depósito / garantia",dep],["Levantamento",lev],["Conversão em renda",conv],["Encerramento",fim]];
+  const grupos=[["Depósito / garantia",dep],["Recurso (indício de depósito recursal)",depIndireto?rec:[]],["Levantamento",lev],["Conversão em renda",conv],["Encerramento / execução",fim]];
   const vistos=new Set();
   const evid=[];
   for(const [g,arr] of grupos){
@@ -285,7 +305,7 @@ function analisarProcesso(p){
   }
   evid.sort((a,b)=>new Date(b.data)-new Date(a.data));
 
-  return {nivel,chave,ctx,fraseDep,sugestao,evid:evid.slice(0,8)};
+  return {nivel,chave,ctx,fraseDep,sugestao,evid:evid.slice(0,10)};
 }
 
 function renderAnalise(p){
