@@ -169,6 +169,146 @@ function fmtDataHora(v){
 }
 function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 
+/* -------------------------------------------------------------------------
+   ANÁLISE — leitura de triagem para recuperação de depósitos.
+   Regras determinísticas sobre os movimentos (metadados). Não apura valores;
+   serve para qualificar a leitura e priorizar o peticionamento.
+   ------------------------------------------------------------------------- */
+function normalizar(s){
+  return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+}
+
+// Dicionários de sinais. Cada item: expressão + rótulo exibido como evidência.
+const SIN_DEPOSITO=[
+  {re:/deposit/,rot:"Depósito"},
+  {re:/garantia/,rot:"Garantia do juízo"},
+  {re:/penhora/,rot:"Penhora"},
+  {re:/(bloqueio|constricao|sisbajud|bacen\s?jud|arresto)/,rot:"Bloqueio/constrição de valores"},
+  {re:/cauca/,rot:"Caução"},
+];
+const SIN_LEVANTAMENTO=[
+  {re:/levantament/,rot:"Levantamento"},
+  {re:/alvara/,rot:"Alvará"},
+  {re:/(transferencia|liberacao).*(valor|numerario|quantia|deposit)/,rot:"Transferência/liberação de valores"},
+  {re:/restituicao/,rot:"Restituição"},
+];
+const SIN_CONVERSAO=[
+  {re:/conversao em renda/,rot:"Conversão em renda"},
+  {re:/convert.*em renda/,rot:"Conversão em renda"},
+  {re:/transformacao em pagamento definitivo/,rot:"Pagamento definitivo ao ente público"},
+];
+const SIN_FIM=[
+  {re:/transito em julgado/,rot:"Trânsito em julgado"},
+  {re:/baixa definitiva/,rot:"Baixa definitiva"},
+  {re:/arquivament/,rot:"Arquivamento"},
+  {re:/\bextin(cao|to|ta)/,rot:"Extinção"},
+];
+
+function coletarSinais(movs,dic){
+  const out=[];
+  for(const m of movs){
+    const txt=normalizar((m.nome||"")+" "+(m.complementosTabelados||[]).map(c=>c.nome||c.descricao||"").join(" "));
+    for(const s of dic){ if(s.re.test(txt)){ out.push({data:m.dataHora,nome:m.nome,rot:s.rot}); break; } }
+  }
+  return out;
+}
+const maisRecente=arr=>arr.reduce((mx,a)=>Math.max(mx,+new Date(a.data)||0),0);
+
+function humanizarDias(d){
+  if(d==null) return "";
+  if(d>=365){const a=Math.floor(d/365);return `${a} ano${a>1?"s":""}`;}
+  if(d>=30){const m=Math.floor(d/30);return `${m} ${m>1?"meses":"mês"}`;}
+  return `${d} dia${d>1?"s":""}`;
+}
+function anosDesde(dataStr){
+  const d=String(dataStr||"");
+  let s=d; if(/^\d{8,14}$/.test(s)) s=`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+  const dt=new Date(s); if(isNaN(dt)) return null;
+  return Math.floor((new Date()-dt)/(365*86400000));
+}
+
+function analisarProcesso(p){
+  const movs=p.movimentos||[];
+  const dep=coletarSinais(movs,SIN_DEPOSITO);
+  const lev=coletarSinais(movs,SIN_LEVANTAMENTO);
+  const conv=coletarSinais(movs,SIN_CONVERSAO);
+  const fim=coletarSinais(movs,SIN_FIM);
+
+  const datas=movs.map(m=>+new Date(m.dataHora)).filter(n=>!isNaN(n));
+  const ultima=datas.length?new Date(Math.max(...datas)):null;
+  const diasParado=ultima?Math.floor((new Date()-ultima)/86400000):null;
+
+  const hasDep=dep.length>0,hasLev=lev.length>0,hasConv=conv.length>0,isFim=fim.length>0;
+  let nivel,chave,fraseDep,sugestao;
+
+  if(!hasDep){
+    nivel="Sem indício";chave="nenhum";
+    fraseDep="Não foram encontrados, nos movimentos públicos, sinais de depósito, garantia ou constrição de valores.";
+    sugestao="Sem indício nos metadados. Havendo suspeita de depósito neste caso, confirme diretamente nos autos — o Datajud pode não registrar todos os atos.";
+  }else if(hasConv){
+    nivel="Baixo";chave="baixo";
+    fraseDep="Há indício de depósito, mas também de conversão em renda: o valor pode ter sido convertido em favor do ente público, o que tende a encerrar a possibilidade de recuperação.";
+    sugestao="Confirmar nos autos se a conversão foi total. Havendo saldo remanescente ou conversão indevida, avaliar a medida cabível.";
+  }else if(hasLev && maisRecente(lev)>=maisRecente(dep)){
+    nivel="Baixo";chave="baixo";
+    fraseDep="Há indício de depósito, porém com levantamento/alvará em data igual ou posterior: os valores podem já ter sido levantados.";
+    sugestao="Confirmar nos autos quem levantou e se restou saldo. Se o levantamento foi parcial ou por terceiro, avaliar providência.";
+  }else if(isFim){
+    nivel="Alto";chave="alto";
+    fraseDep="Há indício de depósito/garantia e o processo aparenta estar encerrado (trânsito em julgado, baixa ou arquivamento) sem sinal de levantamento — forte candidato à recuperação.";
+    sugestao="Priorizar. Confirmar o saldo em conta judicial e peticionar o levantamento/restituição em favor da parte.";
+  }else if(diasParado!=null && diasParado>365){
+    nivel="Médio";chave="medio";
+    fraseDep=`Há indício de depósito e o processo está parado há ${humanizarDias(diasParado)}, sem sinal de levantamento — possível depósito esquecido.`;
+    sugestao="Verificar a situação atual e o saldo em conta judicial; avaliar o peticionamento conforme a fase.";
+  }else{
+    nivel="Médio";chave="medio";
+    fraseDep="Há indício de depósito e o processo aparenta estar em andamento, sem sinal de levantamento.";
+    sugestao="Acompanhar o desfecho; ao encerrar, verificar o saldo e peticionar o levantamento.";
+  }
+
+  const status=isFim?"encerrado/baixado":"em andamento";
+  const anos=anosDesde(p.dataAjuizamento);
+  const ctx=`${p.classe?.nome||"Processo"} ${status}, ${p.grau?p.grau+" ":""}no ${p.orgaoJulgador?.nome||"órgão não informado"} (${p.tribunal||"—"}). `+
+    `Ajuizado em ${fmtData(p.dataAjuizamento)}${anos?` (há ${anos} ano${anos>1?"s":""})`:""}. `+
+    (ultima?`Última movimentação em ${fmtData(ultima.toISOString())}${diasParado!=null?` (há ${humanizarDias(diasParado)})`:""}.`:"");
+
+  // Evidências: agrupadas, sem duplicar rótulo+data.
+  const grupos=[["Depósito / garantia",dep],["Levantamento",lev],["Conversão em renda",conv],["Encerramento",fim]];
+  const vistos=new Set();
+  const evid=[];
+  for(const [g,arr] of grupos){
+    for(const a of arr){
+      const k=g+a.rot+a.data; if(vistos.has(k))continue; vistos.add(k);
+      evid.push({g,rot:a.rot,data:a.data,nome:a.nome});
+    }
+  }
+  evid.sort((a,b)=>new Date(b.data)-new Date(a.data));
+
+  return {nivel,chave,ctx,fraseDep,sugestao,evid:evid.slice(0,8)};
+}
+
+function renderAnalise(p){
+  const a=analisarProcesso(p);
+  const sinais=a.evid.length
+    ? `<div class="sec">Sinais identificados nos movimentos</div>
+       <ul class="sinais">${a.evid.map(e=>
+         `<li><b>${esc(e.rot)}</b> — ${fmtData(e.data)}${e.nome&&normalizar(e.nome)!==normalizar(e.rot)?` · ${esc(e.nome)}`:""} <span style="color:var(--n400)">(${esc(e.g)})</span></li>`
+       ).join("")}</ul>`
+    : "";
+  return `<div class="analise ${a.chave}">
+    <div class="analise-top">
+      <span class="lbl">Potencial de recuperação</span>
+      <span class="nivel ${a.chave}">${esc(a.nivel)}</span>
+    </div>
+    <p class="leitura">${esc(a.ctx)}</p>
+    <p class="leitura">${esc(a.fraseDep)}</p>
+    ${sinais}
+    <div class="sug"><b>Sugestão para o time</b>${esc(a.sugestao)}</div>
+    <div class="ressalva">Leitura automática de triagem, baseada apenas em metadados públicos do Datajud. Não informa valores nem substitui a verificação nos autos e na conta judicial.</div>
+  </div>`;
+}
+
 function renderProcesso(p){
   const assuntos=(p.assuntos||[]).map(a=>`<span class="badge">${esc(a.nome||a.codigo)}</span>`).join("");
   const movs=[...(p.movimentos||[])].sort((a,b)=>new Date(b.dataHora)-new Date(a.dataHora));
@@ -188,6 +328,7 @@ function renderProcesso(p){
       <span class="proc-trib">${esc(p.tribunal||"")}${p.grau?" · "+esc(p.grau):""}</span>
     </div>
     <div class="proc-body">
+      ${renderAnalise(p)}
       <dl class="meta">
         <div><dt>Classe</dt><dd>${esc(p.classe?.nome||"—")}</dd></div>
         <div><dt>Órgão julgador</dt><dd>${esc(p.orgaoJulgador?.nome||"—")}</dd></div>

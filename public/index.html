@@ -161,6 +161,29 @@ input::placeholder{color:var(--n400)}
 .more{margin-top:12px;background:none;border:1px solid var(--n300);border-radius:2px;padding:8px 12px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:11px;color:var(--n700)}
 .more:hover{border-color:var(--carbon)}
 
+/* ===================== BLOCO DE ANÁLISE (leitura p/ recuperação) ===================== */
+.analise{background:#FAF8F5;border:1px solid var(--n200);border-left-width:4px;border-radius:var(--radius);padding:16px 18px;margin-bottom:18px}
+.analise.alto{border-left-color:var(--red)}
+.analise.medio{border-left-color:var(--amber)}
+.analise.baixo{border-left-color:var(--n600)}
+.analise.nenhum{border-left-color:var(--n300)}
+.analise-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.analise-top .lbl{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:10px;color:var(--n400)}
+.nivel{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:11px;padding:5px 10px;border-radius:2px;color:var(--white)}
+.nivel.alto{background:var(--red)}
+.nivel.medio{background:var(--amber);color:var(--carbon)}
+.nivel.baixo{background:var(--n600)}
+.nivel.nenhum{background:none;border:1px solid var(--n300);color:var(--n600)}
+.analise p.leitura{font-size:14.5px;line-height:1.55;color:var(--carbon);margin-bottom:4px}
+.analise .sec{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:10px;color:var(--n400);margin:14px 0 6px}
+.analise ul.sinais{list-style:none;margin:0}
+.analise ul.sinais li{font-size:13px;color:var(--n700);padding:3px 0 3px 16px;position:relative}
+.analise ul.sinais li::before{content:"";position:absolute;left:0;top:8px;width:7px;height:7px;background:var(--red);transform:skewX(-18deg)}
+.analise ul.sinais li b{color:var(--carbon)}
+.analise .sug{font-size:14px;line-height:1.5;color:var(--carbon);border-top:1px solid var(--n200);padding-top:12px;margin-top:14px}
+.analise .sug b{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;font-size:10px;color:var(--n400);display:block;margin-bottom:4px;font-weight:400}
+.analise .ressalva{font-family:var(--mono);font-size:10.5px;letter-spacing:.01em;color:var(--n400);margin-top:12px;line-height:1.5}
+
 /* ===================== RODAPÉ ===================== */
 footer{background:var(--carbon);color:var(--paper);margin-top:48px;padding:36px 20px 40px}
 footer .in{max-width:900px;margin:0 auto}
