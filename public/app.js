@@ -255,10 +255,13 @@ function analisarProcesso(p){
   const hasDepDireto=dep.length>0,hasLev=lev.length>0,hasConv=conv.length>0,isFim=fim.length>0,hasRec=rec.length>0;
   // Na Justiça do Trabalho, recurso pressupõe depósito recursal (indício indireto).
   const depIndireto=ehTrab&&hasRec&&!hasDepDireto;
-  const hasDep=hasDepDireto||depIndireto;
-  const origemDep=hasDepDireto
+  // Um alvará/levantamento comprova que HOUVE depósito de valores no processo.
+  const hasDep=hasDepDireto||depIndireto||hasLev;
+  const origemDep = hasDepDireto
     ? "Há indício de depósito, garantia ou constrição de valores"
-    : "Não há movimento explícito de depósito, mas trata-se de processo trabalhista com recurso — que pressupõe depósito recursal";
+    : depIndireto
+    ? "Não há movimento explícito de depósito, mas há recurso em processo trabalhista — que pressupõe depósito recursal"
+    : "Há registro de alvará/levantamento, o que indica que houve depósito de valores no processo";
   let nivel,chave,fraseDep,sugestao;
 
   if(!hasDep){
@@ -269,10 +272,10 @@ function analisarProcesso(p){
     nivel="Baixo";chave="baixo";
     fraseDep=`${origemDep}, porém também de conversão em renda: o valor pode ter sido convertido em favor do ente público, o que tende a encerrar a possibilidade de recuperação.`;
     sugestao="Confirmar nos autos se a conversão foi total. Havendo saldo remanescente ou conversão indevida, avaliar a medida cabível.";
-  }else if(hasDepDireto && hasLev && maisRecente(lev)>=maisRecente(dep)){
-    nivel="Baixo";chave="baixo";
-    fraseDep=`${origemDep}, porém com levantamento/alvará em data igual ou posterior: os valores podem já ter sido levantados.`;
-    sugestao="Confirmar nos autos quem levantou e se restou saldo. Se o levantamento foi parcial ou por terceiro, avaliar providência.";
+  }else if(hasLev){
+    nivel="Médio";chave="medio";
+    fraseDep=`${origemDep}. Como há registro de levantamento/alvará, os valores podem ter sido total ou parcialmente sacados — é necessário verificar se restou saldo a recuperar.`;
+    sugestao="Verificar na conta judicial se há saldo após o(s) alvará(s). Havendo remanescente — comum quando o depósito recursal excede a condenação —, peticionar a restituição em favor do depositante.";
   }else if(isFim){
     nivel="Alto";chave="alto";
     fraseDep=`${origemDep}, e o processo aparenta estar encerrado ou em fase de execução (trânsito em julgado, baixa, arquivamento, liquidação ou extinção da execução) sem sinal de levantamento — forte candidato à recuperação.`;
